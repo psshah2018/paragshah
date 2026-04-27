@@ -1,0 +1,114 @@
+{
+  "name": "ai-program-management-n8n",
+  "version": "1.0.0",
+  "description": "AI-powered autonomous program management system built on n8n — multi-agent orchestration using GPT-4o, Jira, Google Drive, Airtable, and Slack.",
+  "private": true,
+  "keywords": [
+    "n8n",
+    "agentic-ai",
+    "program-management",
+    "openai",
+    "gpt-4o",
+    "jira",
+    "airtable",
+    "slack",
+    "automation"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+
+  "dependencies": {
+    "n8n": "^1.0.0"
+  },
+
+  "devDependencies": {
+    "dotenv": "^16.0.0"
+  },
+
+  "scripts": {
+    "start": "n8n start",
+    "start:tunnel": "n8n start --tunnel",
+    "export": "n8n export:workflow --all --output=./workflows/",
+    "import": "n8n import:workflow --separate --input=./workflows/"
+  },
+
+  "_comments": {
+    "runtime": "n8n manages its own internal dependency tree. All node packages listed below under n8n-node-types are bundled with n8n and do not require separate installation. They are listed here for documentation and version-pinning reference only.",
+    "code-nodes": "The Code nodes in this project use only Node.js built-in modules (crypto). No external npm packages are required inside Code nodes.",
+    "crypto": "crypto is a Node.js built-in module — available natively in n8n's sandboxed Code node environment. No installation required."
+  },
+
+  "n8n-node-types": {
+    "comment": "All nodes used are part of n8n-nodes-base — bundled with n8n core. No community nodes required.",
+    "n8n-nodes-base.airtable": "2.2",
+    "n8n-nodes-base.code": "2",
+    "n8n-nodes-base.errorTrigger": "1",
+    "n8n-nodes-base.executeWorkflow": "1.3",
+    "n8n-nodes-base.executeWorkflowTrigger": "1.1",
+    "n8n-nodes-base.gmail": "2.2",
+    "n8n-nodes-base.googleDrive": "3",
+    "n8n-nodes-base.httpRequest": "4.4",
+    "n8n-nodes-base.if": "2.3",
+    "n8n-nodes-base.jira": "1",
+    "n8n-nodes-base.merge": "3.2",
+    "n8n-nodes-base.noOp": "1",
+    "n8n-nodes-base.respondToWebhook": "1.5",
+    "n8n-nodes-base.scheduleTrigger": "1.3",
+    "n8n-nodes-base.slack": "2.4",
+    "n8n-nodes-base.splitInBatches": "3",
+    "n8n-nodes-base.webhook": "2.1"
+  },
+
+  "external-services": {
+    "openai": {
+      "models": ["gpt-4o", "gpt-4o-mini"],
+      "endpoints": ["https://api.openai.com/v1/chat/completions"],
+      "used-by": [
+        "Program Management Workflow / Orchestrator OpenAI API call → gpt-4o",
+        "Status Agent / Program Status Analysis OpenAI API call → gpt-4o-mini",
+        "Risk Agent / Risk Detection OpenAI API Call → gpt-4o",
+        "Comms Agent / Meeting Analysis OpenAI API Call → gpt-4o-mini",
+        "Reporting Agent / Reporting Agent OpenAI Call → gpt-4o"
+      ]
+    },
+    "jira-software-cloud": {
+      "credential-type": "jiraSoftwareCloudApi",
+      "used-by": [
+        "Status Agent — GET open sprint issues",
+        "Risk Agent — GET issues, POST create risk ticket",
+        "Comms Agent — GET issues, POST create task ticket"
+      ]
+    },
+    "airtable": {
+      "credential-type": "airtableTokenApi",
+      "tables": ["Projects", "Dependency Mapping"],
+      "used-by": [
+        "Program Management Workflow — read Projects table",
+        "Risk Agent — read Dependency Mapping table"
+      ]
+    },
+    "google-drive": {
+      "credential-type": "googleDriveOAuth2Api",
+      "used-by": [
+        "Comms Agent — search and download meeting notes (.txt)",
+        "Reporting Agent — create exec brief document"
+      ]
+    },
+    "gmail": {
+      "credential-type": "gmailOAuth2",
+      "used-by": [
+        "Slack Approval Handler — send approved brief to exec recipient"
+      ]
+    },
+    "slack": {
+      "credential-type": "slackOAuth2Api",
+      "scopes": ["chat:write", "chat:write.public", "channels:read"],
+      "used-by": [
+        "Program Management Workflow — post brief to exec channel",
+        "Slack Approval Handler — post approval confirmation and edit notifications",
+        "Error Notification — post error alerts"
+      ]
+    }
+  }
+}
