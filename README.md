@@ -330,14 +330,25 @@ The Risk Agent uses GPT-4o to classify risks:
 
 ```
 .
-├── Program_Management_Workflow.json   # Master orchestrator
-├── Status_Agent.json                  # Jira status analysis sub-workflow
-├── Risk_Agent.json                    # Risk detection sub-workflow
-├── Comms_Agent.json                   # Meeting processing sub-workflow
-├── Reporting_Agent.json               # Brief generation sub-workflow
-├── Slack_Approval_Handler.json        # PM approval webhook workflow
-├── Error_Notification.json            # Global error handler
-└── README.md                          # This file
+├── workflows/
+│   ├── agents/
+│   │   ├── 02.status_agent.json         # Jira status analysis sub-workflow
+│   │   ├── 03.risk_agent.json          # Risk detection sub-workflow
+│   │   └── 04.comms_agent.json         # Meeting processing sub-workflow
+│   ├── core/
+│   │   └── 01.orchestrator.json        # Master orchestrator
+│   ├── output/
+│   │   ├── 05.reporting_agent.json      # Brief generation sub-workflow
+│   │   └── 06.slack_approval_handler.json  # PM approval webhook workflow
+│   └── system/
+│       └── 07.error_notification.json  # Global error handler
+├── docs/
+│   └── workflow_guide.docx
+├── program_management_usecase/
+├── package.json
+├── requirements.txt
+├── .gitignore
+└── README.md                              # This file
 ```
 
 ---
