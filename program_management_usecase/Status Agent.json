@@ -1,0 +1,267 @@
+{
+  "name": "Status Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "c055762a-8fe7-4141-a639-df2372f30060",
+      "typeVersion": 1.1,
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "position": [
+        656,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "options": {
+          "fields": "=*all",
+          "jql": "=project = {{ $json.jiraKey }} AND sprint in openSprints() ORDER BY updated DESC"
+        }
+      },
+      "type": "n8n-nodes-base.jira",
+      "typeVersion": 1,
+      "position": [
+        1104,
+        352
+      ],
+      "id": "615e3bf4-a9b2-4cbf-a6fc-28be6906f9f2",
+      "name": "Get many issues",
+      "alwaysOutputData": false,
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "LuOa3npTAyxUG3F7",
+          "name": "Jira SW Cloud account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const DEBUG = $env.DEBUG === 'true';\nconst log   = (...args) => { if (DEBUG) console.log(...args); };\nconst warn  = (...args) => { if (DEBUG) console.log('[WARN]', ...args); };\n\nconst tickets = $input.all().map(item => item.json);\nconst workstream = $json.workstream;\n\nlog('Aggregating', tickets.length, 'tickets for workstream:', workstream);\n\nif (tickets.length === 0) {\n  warn('Zero tickets reached aggregation despite sprint check passing. Check Jira query.');\n}\n\nreturn [{\n  json: {\n    workstream,\n    tickets\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1552,
+        256
+      ],
+      "id": "17d6aea5-6efb-49c2-b959-0fb5ee7b4050",
+      "name": "Agregate tickets"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n  JSON.stringify({\n    model: \"gpt-4o-mini\",\n    max_tokens: 1024,\n    temperature: 0.1,\n    messages: [\n      {\n        role: \"system\",\n        content: \"You are a program status analysis agent. Analyze Jira ticket data for a single workstream and produce a structured RAG status report. Return ONLY valid JSON with no markdown fences and no explanation.\"\n      },\n      {\n        role: \"user\",\n        content: \"Analyze the following Jira tickets for workstream: \" +\n          $json.workstream +\n          \"\\n\\nTickets:\\n\" +\n          JSON.stringify($json.tickets, null, 2) +\n          \"\\n\\nReturn a JSON object with exactly these fields:\\n\" +\n          JSON.stringify({\n            rag_status: \"red|amber|green\",\n            days_variance: 0,\n            blockers: [{ description: \"string\", owner: \"string\", age_days: 0 }],\n            velocity_trend: \"stable|improving|declining\",\n            summary: \"2 sentence plain English summary\"\n          }, null, 2)\n      }\n    ]\n  })\n}}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1776,
+        256
+      ],
+      "id": "9b219737-64c1-44b6-9d0a-0ca6da4e6678",
+      "name": "Program Status Analysis OpenAI API call",
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": false,
+      "notesInFlow": false,
+      "credentials": {
+        "openAiApi": {
+          "id": "btt3s54CEvsfy9tv",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const DEBUG = $env.DEBUG === 'true';\nconst log   = (...args) => { if (DEBUG) console.log(...args); };\nconst warn  = (...args) => { if (DEBUG) console.log('[WARN]', ...args); };\n\n\nconst response = $input.first().json;\n\nif (response.error) {\n  throw new Error('OpenAI API error: ' + response.error.message);\n}\n\nif (!response.choices || response.choices.length === 0) {\n  throw new Error('No choices returned: ' + JSON.stringify(response).slice(0, 300));\n}\n\nconst raw = response.choices[0].message.content;\nconst clean = raw.replace(/```json|```/gi, '').trim();\n\nlet parsed;\ntry {\n  parsed = JSON.parse(clean);\n} catch(e) {\n  throw new Error('JSON parse failed: ' + raw.slice(0, 300));\n}\n\n// Schema validation\nconst requiredFields = ['rag_status', 'days_variance', 'blockers', 'velocity_trend', 'summary'];\nconst missing = requiredFields.filter(f => parsed[f] === undefined || parsed[f] === null);\nif (missing.length > 0) {\n  throw new Error(\n    'OpenAI response missing required fields: ' + missing.join(', ') +\n    '\\nRaw response: ' + raw.slice(0, 300)\n  );\n}\n\nconst validRag = ['red', 'amber', 'green'];\nif (!validRag.includes(parsed.rag_status.toLowerCase())) {\n  throw new Error(\n    'Invalid rag_status value: ' + parsed.rag_status +\n    '. Must be one of: ' + validRag.join(', ')\n  );\n}\n\nif (!Array.isArray(parsed.blockers)) {\n  throw new Error('blockers must be an array, got: ' + typeof parsed.blockers);\n}\n\nparsed.workstream = $('Execute Workflow Trigger').first().json.workstream;\nparsed.jiraKey    = $('Execute Workflow Trigger').first().json.jiraKey;\nparsed.as_of      = new Date().toISOString();\n\nlog(\n  'Status parsed for', parsed.workstream,\n  '| RAG:', parsed.rag_status,\n  '| Blockers:', parsed.blockers.length,\n  '| Velocity:', parsed.velocity_trend\n);\n\nreturn [{ json: parsed }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2000,
+        352
+      ],
+      "id": "d1436a27-d23f-424a-9006-2e8d2a089365",
+      "name": "Parse Result"
+    },
+    {
+      "parameters": {
+        "jsCode": "const DEBUG = $env.DEBUG === 'true';\nconst log   = (...args) => { if (DEBUG) console.log(...args); };\nconst warn  = (...args) => { if (DEBUG) console.log('[WARN]', ...args); };\n\n\nconst item = $input.first().json;\n\nconst workstream = item.workstream;\nconst jiraKey    = item.jiraKey;\nconst priority   = item.priority;\n\n// Validate jiraKey is present\nif (!jiraKey || typeof jiraKey !== 'string') {\n  throw new Error(\n    'Validation failed: jiraKey is missing or not a string.' +\n    '\\nReceived: ' + JSON.stringify(item)\n  );\n}\n\n// Validate jiraKey format — must be 2-10 uppercase letters\n// optionally followed by a hyphen (e.g. PROJ, MYAPP, TEAM-)\nconst jiraKeyPattern = /^[A-Z][A-Z0-9]{1,9}-?$/;\nif (!jiraKeyPattern.test(jiraKey.trim())) {\n  throw new Error(\n    'Validation failed: jiraKey \"' + jiraKey + '\" does not match expected format.' +\n    '\\nExpected pattern: 2-10 uppercase letters/numbers (e.g. PROJ, MYAPP).' +\n    '\\nThis is likely an LLM hallucination — check the orchestrator output.'\n  );\n}\n\n// Validate workstream is present\nif (!workstream || typeof workstream !== 'string' || workstream.trim() === '') {\n  throw new Error(\n    'Validation failed: workstream is missing or empty.' +\n    '\\nReceived: ' + JSON.stringify(item)\n  );\n}\n\n// Validate priority is one of the expected values\nconst validPriorities = ['high', 'medium', 'low'];\nif (priority && !validPriorities.includes(priority.toLowerCase())) {\n  // Warn only — priority is not used in the JQL so not worth aborting for\n  warn('Unexpected priority value: ' + priority + '. Continuing.');\n}\n\n// Pass through cleaned data\nreturn [{\n  json: {\n    workstream: workstream.trim(),\n    jiraKey:    jiraKey.trim().replace(/-$/, ''), // strip trailing hyphen if present\n    priority:   priority ?? 'medium'\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        352
+      ],
+      "id": "a7f2a241-405d-46f7-8935-596f860f0a8c",
+      "name": "Validate Input"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "1f9f37ea-e568-4c0e-bb09-eb2cdc94bd58",
+              "leftValue": "={{ $input.all().length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1328,
+        352
+      ],
+      "id": "0740ece1-4bd8-4fdc-ade8-7230f6434827",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "jsCode": "const DEBUG = $env.DEBUG === 'true';\nconst log   = (...args) => { if (DEBUG) console.log(...args); };\nconst warn  = (...args) => { if (DEBUG) console.log('[WARN]', ...args); };\n\n\nconst trigger = $('Execute Workflow Trigger').first().json;\n\nwarn(\n  'No open sprint tickets found for workstream: ' + trigger.workstream +\n  ' (jiraKey: ' + trigger.jiraKey + '). Returning default no-data status record.'\n);\n\nreturn [{\n  json: {\n    rag_status:      'amber',\n    days_variance:   0,\n    blockers:        [],\n    velocity_trend:  'stable',\n    summary:         'No open sprint data available for this workstream. Status could not be assessed this week.',\n    workstream:      trigger.workstream,\n    jiraKey:         trigger.jiraKey,\n    as_of:           new Date().toISOString(),\n    _no_data:        true\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1776,
+        448
+      ],
+      "id": "45af7029-abaf-4c5c-8563-2c5e9bbd06eb",
+      "name": "No Sprint Data"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get many issues": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agregate tickets": {
+      "main": [
+        [
+          {
+            "node": "Program Status Analysis OpenAI API call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Program Status Analysis OpenAI API call": {
+      "main": [
+        [
+          {
+            "node": "Parse Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Result": {
+      "main": [
+        []
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "Get many issues",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Agregate tickets",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Sprint Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No Sprint Data": {
+      "main": [
+        [
+          {
+            "node": "Parse Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "KbsJHQVOmJv0DC48",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "d79b5696-028a-464e-a21b-625d220219a7",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "6615b656b8371fddd13c58341e0cea8d6dcdf664a545af635d49e593619368af"
+  },
+  "id": "qQYqqVmZX1t34Wdg",
+  "tags": []
+}

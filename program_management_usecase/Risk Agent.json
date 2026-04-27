@@ -1,0 +1,582 @@
+{
+  "name": "Risk Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        1264,
+        -128
+      ],
+      "id": "68a8ba44-9f7b-414a-b99f-e8621dd3a625",
+      "name": "Execute Workflow Trigger"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Code node — wrap trigger input into statusRecords\n// Language: JavaScript\n// Place between: Execute Workflow Trigger → this node → Airtable node\n\nconst DEBUG = $env.DEBUG === 'true';\nconst log   = (...args) => { if (DEBUG) console.log(...args); };\nconst warn  = (...args) => { if (DEBUG) console.log('[WARN]', ...args); };\n\nconst trigger = $input.first().json;\n\n// The trigger output is the raw status record array\n// Each item in $input is one status record\nconst allItems = $input.all();\n\n// Build statusRecords array from all input items\nconst statusRecords = allItems.map(i => i.json);\n\nlog('Status records wrapped:', statusRecords.length);\nlog('First workstream:', statusRecords[0]?.workstream);\n\nreturn [{\n  json: {\n    statusRecords: statusRecords\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1488,
+        -128
+      ],
+      "id": "9d8f0ece-01ae-46cf-9f2a-08f5fb5bf185",
+      "name": "Code — wrap trigger input"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "0edc1634-6117-4eb6-a628-f2e05a2c2cac",
+              "leftValue": "={{ Array.isArray($json.risks) && $json.risks.some(r => r.severity === 'critical') }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2608,
+        -128
+      ],
+      "id": "38790c58-6afe-4c20-b8f3-4f881944519e",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "project": {
+          "__rl": true,
+          "value": "={{ $('Get Project Id').item.json.values[0].id }}",
+          "mode": "id"
+        },
+        "issueType": {
+          "__rl": true,
+          "value": "={{ $json.riskId }}",
+          "mode": "id"
+        },
+        "summary": "=={{ \"[CRITICAL] \" + $('Loop Over Items').first().json.description }}",
+        "additionalFields": {
+          "description": "=={{ \"Workstream: \" + $('Loop Over Items').first().json.workstream + \"\\nCascades to: \" + ($('Loop Over Items').first().json.cascade_targets ?? []).join(', ') + \"\\nDays until impact: \" + $('Loop Over Items').first().json.days_until_impact + \"\\nOwner: \" + $('Loop Over Items').first().json.owner + \"\\nBlocker age: \" + $('Loop Over Items').first().json.blocker_age_days + \" days\\nRecommended action: \" + $('Loop Over Items').first().json.recommended_action }}",
+          "priority": {
+            "__rl": true,
+            "value": "1",
+            "mode": "list",
+            "cachedResultName": "Highest"
+          }
+        }
+      },
+      "type": "n8n-nodes-base.jira",
+      "typeVersion": 1,
+      "position": [
+        4400,
+        -224
+      ],
+      "id": "acf6c752-c20d-4010-af06-c991d87054d8",
+      "name": "Create an issue",
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "LuOa3npTAyxUG3F7",
+          "name": "Jira SW Cloud account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "appR09XcFwtXya371",
+          "mode": "list",
+          "cachedResultName": "prg_mgmt_base",
+          "cachedResultUrl": "https://airtable.com/appR09XcFwtXya371"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblShwtvyFdj6HsBW",
+          "mode": "list",
+          "cachedResultName": "Dependancy Mapping",
+          "cachedResultUrl": "https://airtable.com/appR09XcFwtXya371/tblShwtvyFdj6HsBW"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        1712,
+        -128
+      ],
+      "id": "057e8bd6-9927-4887-8a54-759f727fc281",
+      "name": "Check Project Dependancies",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "6DWWE8BqsmeYRIzN",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Node 3 — assemble statusRecords + dependencyMap\n// Language: JavaScript\n\n// Read from the wrap node output, not the trigger directly\n\nconst DEBUG = $env.DEBUG === 'true';\nconst log   = (...args) => { if (DEBUG) console.log(...args); };\nconst warn  = (...args) => { if (DEBUG) console.log('[WARN]', ...args); };\n\nconst wrapNode = $('Code — wrap trigger input').first().json;\n\nlet statusRecords;\ntry {\n  if (typeof wrapNode.statusRecords === 'string') {\n    statusRecords = JSON.parse(wrapNode.statusRecords);\n  } else if (Array.isArray(wrapNode.statusRecords)) {\n    statusRecords = wrapNode.statusRecords;\n  } else {\n    throw new Error('statusRecords missing or wrong type');\n  }\n} catch(e) {\n  throw new Error('Could not parse statusRecords: ' + e.message);\n}\n\nlog('Status records received:', statusRecords.length);\n\n// ── dependencyMap from Airtable ────────────────────────────\nconst airtableRows = $input.all();\n\nlog('Airtable rows fetched:', airtableRows.length);\n\nif (airtableRows.length === 0) {\n  throw new Error(\n    'No dependency rows from Airtable. ' +\n    'Check Base ID, table name, and that rows exist.'\n  );\n}\n\nconst dependencyMap = airtableRows\n  .filter(i => i.json.fields?.Active !== false)\n  .map(i => ({\n    upstream:        i.json.fields['Upstream workstream']   ?? 'Unknown',\n    downstream:      i.json.fields['Downstream Workstream'] ?? 'Unknown',\n    lag_days:        i.json.fields['Lag Days']              ?? 0,\n    dependency_type: i.json.fields.Type                 ?? 'blocks',\n    notes:           i.json.fields.Notes                ?? ''\n  }));\n\nconst dependencyCount = Object.keys(dependencyMap).length;\n\nif (dependencyCount === 0) {\n  warn(\n    'No project dependencies found in Airtable for this run. ' +\n    'Cross-workstream cascade risk analysis will be limited to single-workstream signals only. ' +\n    'If dependencies are expected, check the Airtable Dependencies table and linked record fields.'\n  );\n} else {\n  log('Dependency map built with', dependencyCount, 'entries.');\n}\n\nconst dependencyContext = Object.keys(dependencyMap).length > 0\n  ? JSON.stringify(dependencyMap, null, 2)\n  : 'No dependency data available for this run. Analyse each workstream independently.';\n\nreturn [{\n  json: {\n    statusRecords,\n    dependencyMap,\n    dependencyContext  // ← add this\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1936,
+        -128
+      ],
+      "id": "3f05f8a1-932f-4e7d-a2a5-c5fd93c50758",
+      "name": "Assemble Status and Dependancies"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n  JSON.stringify({\n    model: \"gpt-4o\",\n    max_tokens: 2048,\n    temperature: 0.1,\n    messages: [\n      {\n        role: \"system\",\n        content: \"You are a program risk detection agent for a software delivery program. Analyze workstream status records and a dependency map. Identify risks and determine which will cascade to other workstreams if unresolved.\\n\\nSeverity definitions:\\n- critical: blocks another workstream milestone within 7 days\\n- amber: may impact another workstream within 14 days\\n- green: contained, no cascade risk\\n\\nRules:\\n- A blocker aged 7+ days with no owner response is always critical\\n- Declining velocity on a workstream that feeds another is amber minimum\\n- Do not invent risks not supported by the data\\n- Return ONLY valid JSON, no markdown fences, no explanation\"\n      },\n      {\n        role: \"user\",\n        content: \"Analyze the following data.\\n\\nSTATUS RECORDS:\\n\" +\n          JSON.stringify($json.statusRecords, null, 2) +\n          \"\\n\\nDependency map:\\n\" +\n          $json.dependencyContext +\n          \"\\n\\nToday: \" + new Date().toDateString() +\n          \"\\n\\nReturn a JSON object with exactly this schema:\\n\" +\n          JSON.stringify({\n            overall_program_rag: \"red|amber|green\",\n            risks: [{\n              id: \"RISK-001\",\n              workstream: \"string\",\n              jiraKey: \"string\",\n              description: \"one sentence\",\n              severity: \"critical|amber|green\",\n              cascade_targets: [\"workstream names\"],\n              days_until_impact: 0,\n              owner: \"string\",\n              blocker_age_days: 0,\n              recommended_action: \"one sentence\"\n            }],\n            summary: \"2-3 sentence plain English summary\"\n          }, null, 2)\n      }\n    ]\n  })\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2160,
+        -128
+      ],
+      "id": "3f49f709-85a3-443e-b432-fcce767bfe60",
+      "name": "Risk Detection OpenAI API Call",
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "openAiApi": {
+          "id": "btt3s54CEvsfy9tv",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Node 5 — parse OpenAI risk analysis response\n// Language: JavaScript\n\nconst DEBUG = $env.DEBUG === 'true';\nconst log   = (...args) => { if (DEBUG) console.log(...args); };\nconst warn  = (...args) => { if (DEBUG) console.log('[WARN]', ...args); };\n\nconst response = $input.first().json;\n\n// Surface API errors clearly\nif (response.error) {\n  throw new Error('OpenAI API error: ' + response.error.message);\n}\n\n// Guard missing choices\nif (!response.choices || response.choices.length === 0) {\n  throw new Error(\n    'OpenAI returned no choices. Response: ' +\n    JSON.stringify(response).slice(0, 300)\n  );\n}\n\nconst raw = response.choices[0].message.content;\n\nif (!raw) {\n  throw new Error('OpenAI message content is empty');\n}\n\n// Strip markdown fences\nconst clean = raw.replace(/```json|```/gi, '').trim();\n\n// Parse JSON\nlet parsed;\ntry {\n  parsed = JSON.parse(clean);\n} catch(e) {\n  throw new Error('Invalid JSON from OpenAI: ' + raw.slice(0, 300));\n}\n\n// Schema validation\nif (!parsed.risks || !Array.isArray(parsed.risks)) {\n  throw new Error(\n    'OpenAI response missing risks array.' +\n    '\\nRaw response: ' + raw.slice(0, 300)\n  );\n}\n\nif (parsed.risks.length === 0) {\n  warn('Risk Agent: OpenAI returned zero risks. Passing empty array downstream.');\n}\n\nconst validSeverities = ['critical', 'amber', 'green'];\nconst riskFieldErrors = [];\n\nparsed.risks.forEach((risk, i) => {\n  const missingRiskFields = ['severity', 'description', 'owner'].filter(\n    f => risk[f] === undefined || risk[f] === null || risk[f] === ''\n  );\n  if (missingRiskFields.length > 0) {\n    riskFieldErrors.push(`Risk[${i}] missing: ${missingRiskFields.join(', ')}`);\n  }\n  if (risk.severity && !validSeverities.includes(risk.severity.toLowerCase())) {\n    riskFieldErrors.push(`Risk[${i}] invalid severity: ${risk.severity}`);\n  }\n});\n\nif (riskFieldErrors.length > 0) {\n  throw new Error('Risk schema errors:\\n' + riskFieldErrors.join('\\n'));\n}\n\n// Validate required fields\nif (!parsed.risks || !Array.isArray(parsed.risks)) {\n  throw new Error('Response missing risks array: ' + raw.slice(0, 300));\n}\n\nlog('Overall RAG:', parsed.overall_program_rag);\nlog('Total risks:', parsed.risks.length);\nlog('Critical risks:', parsed.risks.filter(r => r.severity === 'critical').length);\n\nreturn [{ json: parsed }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2384,
+        -128
+      ],
+      "id": "2e297ac8-f1bd-4091-a251-4a97b97d6494",
+      "name": "Parse Risk Analysis Response"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Splits critical risks into separate items\n// so Jira node creates one ticket per risk\n// Language: JavaScript\n\nconst DEBUG = $env.DEBUG === 'true';\nconst log   = (...args) => { if (DEBUG) console.log(...args); };\nconst warn  = (...args) => { if (DEBUG) console.log('[WARN]', ...args); };\n\nconst criticalRisks = $json.risks.filter(r => r.severity === 'critical');\n\nlog('Creating Jira tickets for', criticalRisks.length, 'critical risks');\n\nreturn criticalRisks.map(r => ({ json: r }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2832,
+        -224
+      ],
+      "id": "dd309aa1-1a37-402c-807e-44f0190f274c",
+      "name": "Splits Critical Risks into Separate Items"
+    },
+    {
+      "parameters": {
+        "jsCode": "const DEBUG = $env.DEBUG === 'true';\nconst log   = (...args) => { if (DEBUG) console.log(...args); };\n\nconst riskSummary = $input.all().map(i => i.json);\n\nlog('Risk summary items being returned:', riskSummary.length);\n\nreturn [{\n  json: {\n    riskSummary\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2832,
+        -32
+      ],
+      "id": "6948be37-c8e9-47d1-9542-8583df9ad150",
+      "name": "Pass Risk Summary to Main Workflow"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "options": {
+          "jql": "={{ \"project = \\\"\" + $json.workstream +\"\\\" AND issueType=\\\"Risk\\\" AND summary ~ \\\"\" + $json.description.substring(0, $json.description.lastIndexOf(' ', 50)) + \"\\\" AND created >= -7d ORDER BY created DESC\" }}\n"
+        }
+      },
+      "type": "n8n-nodes-base.jira",
+      "typeVersion": 1,
+      "position": [
+        3280,
+        -288
+      ],
+      "id": "a16c78f0-dfb1-4e5e-b3e6-3779e140bfc8",
+      "name": "Get Current Issues from Jira",
+      "alwaysOutputData": true,
+      "executeOnce": false,
+      "notesInFlow": false,
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "LuOa3npTAyxUG3F7",
+          "name": "Jira SW Cloud account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "2d4203c2-f9e8-40bd-827f-971d1f36a580",
+              "leftValue": "={{ Object.keys($input.first().json).length }}",
+              "rightValue": "=0",
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        3504,
+        -240
+      ],
+      "id": "2fe6b0ed-181b-46a7-98a9-677f3acae255",
+      "name": "Check for Duplicates"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        3056,
+        -224
+      ],
+      "id": "88b411bf-4753-4f7f-8dac-4aab9a52437e",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "url": "https://paragprojects.atlassian.net/rest/api/3/project/search",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "jiraSoftwareCloudApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "={{ $('Loop Over Items').first().json.workstream }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        3728,
+        -240
+      ],
+      "id": "2badc6a6-9386-40c7-8000-1b39d8e20cbe",
+      "name": "Get Project Id",
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "LuOa3npTAyxUG3F7",
+          "name": "Jira SW Cloud account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://paragprojects.atlassian.net/rest/api/2/project/{{ $('Get Project Id').item.json.values[0].id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "jiraSoftwareCloudApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        3952,
+        -240
+      ],
+      "id": "ae48f7cb-8a23-4aff-85da-aba1a027b029",
+      "name": "Get WorkTypes for Project",
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "LuOa3npTAyxUG3F7",
+          "name": "Jira SW Cloud account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const issueTypes = $input.first().json.issueTypes ?? [];\nconst risk = issueTypes.find(t => t.name.toLowerCase() === 'risk');\n\nreturn [{\n  json: {\n    riskId: risk?.id ?? null\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4176,
+        -240
+      ],
+      "id": "0083cab2-4e84-4711-bfcc-237411a93025",
+      "name": "Get Id of Risk issueType"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        3280,
+        -480
+      ],
+      "id": "60c40799-6c54-4a27-b352-6abddc88b441",
+      "name": "No Operation, do nothing"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Code — wrap trigger input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code — wrap trigger input": {
+      "main": [
+        [
+          {
+            "node": "Check Project Dependancies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Splits Critical Risks into Separate Items",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Pass Risk Summary to Main Workflow",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Check Project Dependancies": {
+      "main": [
+        [
+          {
+            "node": "Assemble Status and Dependancies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assemble Status and Dependancies": {
+      "main": [
+        [
+          {
+            "node": "Risk Detection OpenAI API Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Risk Detection OpenAI API Call": {
+      "main": [
+        [
+          {
+            "node": "Parse Risk Analysis Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Risk Analysis Response": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Splits Critical Risks into Separate Items": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pass Risk Summary to Main Workflow": {
+      "main": [
+        []
+      ]
+    },
+    "Get Current Issues from Jira": {
+      "main": [
+        [
+          {
+            "node": "Check for Duplicates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check for Duplicates": {
+      "main": [
+        [
+          {
+            "node": "Get Project Id",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [
+          {
+            "node": "No Operation, do nothing",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Current Issues from Jira",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create an issue": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Project Id": {
+      "main": [
+        [
+          {
+            "node": "Get WorkTypes for Project",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get WorkTypes for Project": {
+      "main": [
+        [
+          {
+            "node": "Get Id of Risk issueType",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Id of Risk issueType": {
+      "main": [
+        [
+          {
+            "node": "Create an issue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "KbsJHQVOmJv0DC48",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "692689b8-1cb9-463b-bf79-e605f87a6738",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "6615b656b8371fddd13c58341e0cea8d6dcdf664a545af635d49e593619368af"
+  },
+  "id": "jQhflq0TQn0v30GM",
+  "tags": []
+}

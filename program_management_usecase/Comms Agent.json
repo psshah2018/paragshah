@@ -1,0 +1,606 @@
+{
+  "name": "Comms Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        2096,
+        -16
+      ],
+      "id": "72692ecb-b6c0-47c1-8274-f4355d19725d",
+      "name": "Download file",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "3qEUbVK2Ew5NTy6E",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "fileFolder",
+        "searchMethod": "query",
+        "queryString": "=mimeType='text/plain' and modifiedTime > '{{ $json.statusRecords[0].weekStart }}' and '1LoBq3Od82kg5heNP9_OQLqlCxHgIj7S8' in parents",
+        "filter": {
+          "folderId": {
+            "__rl": true,
+            "value": "1LoBq3Od82kg5heNP9_OQLqlCxHgIj7S8",
+            "mode": "list",
+            "cachedResultName": "Meetings",
+            "cachedResultUrl": "https://drive.google.com/drive/folders/1LoBq3Od82kg5heNP9_OQLqlCxHgIj7S8"
+          },
+          "whatToSearch": "files"
+        },
+        "options": {
+          "fields": [
+            "name",
+            "id"
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        1648,
+        -96
+      ],
+      "id": "f10a3e3b-d065-4c78-bd03-e6a6860a768b",
+      "name": "Search files and folders",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "3qEUbVK2Ew5NTy6E",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Code node — extract text from txt file\n// Automatically finds the correct binary property name\n// Language: JavaScript\n\nconst DEBUG = $env.DEBUG === 'true';\nconst log   = (...args) => { if (DEBUG) console.log(...args); };\nconst warn  = (...args) => { if (DEBUG) console.log('[WARN]', ...args); };\n\nconst item = $input.first();\n\n// Find all binary property names\nconst binaryKeys = Object.keys(item.binary ?? {});\n\nif (binaryKeys.length === 0) {\n  throw new Error('No binary data found. Check Google Drive node Binary Property setting.');\n}\n\n// Use the first binary property regardless of what it is named\nconst binaryKey = binaryKeys[0];\nconst binaryData = item.binary[binaryKey];\n\nlog('Binary key found:', binaryKey);\nlog('MimeType:', binaryData.mimeType);\nlog('FileName:', binaryData.fileName);\n\n// Validate it is a text file\nif (binaryData.mimeType && !binaryData.mimeType.includes('text')) {\n  throw new Error(\n    'Expected text file but got: ' + binaryData.mimeType +\n    '. Convert file to .txt before saving to Google Drive.'\n  );\n}\n\n// 1. Fetch the actual file content from the filesystem into a Buffer\nconst buffer = await this.helpers.getBinaryDataBuffer(0, 'data');\n\n// 2. Convert that buffer to a UTF-8 string\nconst text = buffer.toString('utf-8');\n\nif (!text || text.length === 0) {\n  throw new Error('File decoded but text is empty');\n}\n\nlog('Text length:', text.length);\nlog('Text preview:', text.slice(0, 200));\n\nconst fileName = item.json.name\n  ?? binaryData.fileName\n  ?? 'Unknown meeting';\n\nreturn [{\n  json: {\n    fileName,\n    transcriptText: text.slice(0, 8000)\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2320,
+        -16
+      ],
+      "id": "fe73e65b-d1f3-46ac-864f-e6ad73e43fe4",
+      "name": "Extract Text from Binary File"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n  JSON.stringify({\n    model: \"gpt-4o-mini\",\n    max_tokens: 1024,\n    temperature: 0.1,\n    messages: [\n      {\n        role: \"system\",\n        content: \"You are a meeting analysis agent. Extract structured information from meeting transcripts. Return ONLY valid JSON, no markdown fences, no explanation.\"\n      },\n      {\n        role: \"user\",\n        content: \"Analyze this meeting transcript from: \" + $json.fileName +\n          \"\\n\\nTRANSCRIPT:\\n\" + $json.transcriptText +\n          \"\\n\\nReturn JSON with exactly these fields:\\n\" +\n          JSON.stringify({\n            meeting_name: \"string\",\n            date: \"string\",\n            project: \"string\",\n            decisions: [\"string\"],\n            action_items: [{\n              description: \"string\",\n              owner: \"string\",\n              due_date: \"string or null\"\n            }],\n            unresolved_questions: [\"string\"],\n            summary: \"2 sentence summary\"\n          }, null, 2)\n      }\n    ]\n  })\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2544,
+        -16
+      ],
+      "id": "a0db4446-6377-4b46-8211-c9ac8f741d7d",
+      "name": "Meeting Analysis OpenAI API Call",
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "openAiApi": {
+          "id": "btt3s54CEvsfy9tv",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Node 5 — parse OpenAI response + prepare action items for Jira\nconst DEBUG = $env['DEBUG'] === 'true';\nconst log   = (...args) => { if (DEBUG) console.log(...args); };\nconst warn  = (...args) => { if (DEBUG) console.log('[WARN]', ...args); };\n\nconst response = $input.first().json;\n\nif (response.error) {\n  throw new Error('OpenAI error: ' + response.error.message);\n}\nif (!response.choices || response.choices.length === 0) {\n  throw new Error('No choices: ' + JSON.stringify(response).slice(0, 300));\n}\n\nconst raw = response.choices[0].message.content;\nconst clean = raw.replace(/```json|```/gi, '').trim();\n\nlet parsed;\ntry {\n  parsed = JSON.parse(clean);\n} catch(e) {\n  throw new Error('Invalid JSON: ' + raw.slice(0, 300));\n}\n\n// Schema validation\nif (!parsed.summary || typeof parsed.summary !== 'string' || parsed.summary.trim() === '') {\n  throw new Error(\n    'OpenAI response missing or empty summary field.' +\n    '\\nRaw response: ' + raw.slice(0, 300)\n  );\n}\n\nif (!parsed.action_items || !Array.isArray(parsed.action_items)) {\n  throw new Error(\n    'OpenAI response missing action_items array.' +\n    '\\nRaw response: ' + raw.slice(0, 300)\n  );\n}\n\nparsed.action_items.forEach((item, i) => {\n  const missingItemFields = ['description', 'owner'].filter(\n    f => !item[f] || item[f].toString().trim() === ''\n  );\n  if (missingItemFields.length > 0) {\n    // Warn but don't throw — partial action items can still be useful\n    warn(`Action item[${i}] missing fields: ${missingItemFields.join(', ')}. Skipping Jira creation for this item.`);\n    item._skip = true;\n  }\n});\n\n// Filter out incomplete items before Jira creation\nparsed.action_items = parsed.action_items.filter(item => !item._skip);\n\n\n\nlog('Meeting:', parsed.meeting_name);\nlog('Action items:', parsed.action_items?.length ?? 0);\nlog('Decisions:', parsed.decisions?.length ?? 0);\n\n// Return one item per action item for Jira node\nconst actionItems = parsed.action_items ?? [];\n\nif (actionItems.length === 0) {\n  // No action items — return a placeholder so workflow continues\n  return [{ json: { noActionItems: true, summary: parsed.summary } }];\n}\n\nreturn actionItems.map(item => ({\n  json: {\n    description: item.description,\n    owner:       item.owner,\n    due_date:    item.due_date,\n    meeting:     parsed.meeting_name,\n    summary:     parsed.summary,\n    project:     parsed.project\n  }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2768,
+        -16
+      ],
+      "id": "76abd2ad-bb38-4205-a4c0-f479e74f9c4d",
+      "name": "Parse OpenAI Response and Prepare Action Items for Jira"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "5fdd3092-2f8b-4731-9253-8c3934f9856a",
+              "leftValue": "={{ !$json.noActionItems }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2992,
+        -16
+      ],
+      "id": "393b1192-37dd-47bc-84bb-b681bc8852fa",
+      "name": "Check for Action Items"
+    },
+    {
+      "parameters": {
+        "project": {
+          "__rl": true,
+          "value": "={{ $('Get Project Id').item.json.values[0].id }}",
+          "mode": "id"
+        },
+        "issueType": {
+          "__rl": true,
+          "value": "={{ $json.taskId }}",
+          "mode": "id"
+        },
+        "summary": "=={{ \"[Action] \" + $('Loop Over Items').first().json.description }}",
+        "additionalFields": {
+          "description": "=={{ \"Owner: \" + $('Loop Over Items').first().json.owner + \"\\nFrom meeting: \" + $('Loop Over Items').first().json.meeting + \"\\nDue: \" + ($('Loop Over Items').first().json.due_date ?? \"Not specified\") }}"
+        }
+      },
+      "type": "n8n-nodes-base.jira",
+      "typeVersion": 1,
+      "position": [
+        4560,
+        176
+      ],
+      "id": "a872475c-de72-4aa8-bc0b-f6b14c6d5148",
+      "name": "Create Jira issue(s)",
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "LuOa3npTAyxUG3F7",
+          "name": "Jira SW Cloud account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const DEBUG = $env.DEBUG === 'true';\nconst log   = (...args) => { if (DEBUG) console.log(...args); };\nconst warn  = (...args) => { if (DEBUG) console.log('[WARN]', ...args); };\n\nconst response = $('Meeting Analysis OpenAI API Call').first().json;\n\nif (response.error) {\n  throw new Error('OpenAI error: ' + response.error.message);\n}\nif (!response.choices || response.choices.length === 0) {\n  throw new Error('No choices: ' + JSON.stringify(response).slice(0, 300));\n}\n\nconst raw   = response.choices[0].message.content;\nconst clean = raw.replace(/```json|```/gi, '').trim();\n\nlet parsed;\ntry {\n  parsed = JSON.parse(clean);\n} catch(e) {\n  throw new Error('Invalid JSON from meeting analysis: ' + raw.slice(0, 300));\n}\n\n// Validate commsSummary has expected fields\nif (!parsed.summary || typeof parsed.summary !== 'string') {\n  warn('commsSummary missing summary field — Reporting Agent prompt will have incomplete meeting digest.');\n}\n\nif (!parsed.action_items || !Array.isArray(parsed.action_items)) {\n  warn('commsSummary missing action_items array.');\n}\n\nlog('commsSummary built. Action items:', parsed.action_items?.length ?? 0);\n\nreturn [{ json: { commsSummary: parsed } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3440,
+        -208
+      ],
+      "id": "1397c7ac-7b68-468d-addf-cc0a139f46fc",
+      "name": "Return to Main Workflow",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "options": {
+          "jql": "={{ \"project = \\\"\" + $json.project + \"\\\" AND summary ~ \\\"\" + $json.description.substring(0, $json.description.lastIndexOf(' ', 50)) + \"\\\" AND created >= -7d ORDER BY created DESC\" }}"
+        }
+      },
+      "type": "n8n-nodes-base.jira",
+      "typeVersion": 1,
+      "position": [
+        3440,
+        16
+      ],
+      "id": "cde3f1b3-5c93-410a-9402-fcb24c5a44bc",
+      "name": "Get many issues",
+      "alwaysOutputData": true,
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "LuOa3npTAyxUG3F7",
+          "name": "Jira SW Cloud account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "b42b94d6-2133-443a-9632-e790d7dd27f6",
+              "leftValue": "={{ Object.keys($input.first().json).length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        3664,
+        112
+      ],
+      "id": "c2b240c7-c7cf-4a56-92e0-9e7eeac7bd41",
+      "name": "Check for Duplicates"
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        1424,
+        -96
+      ],
+      "id": "c22282b4-8f63-4ce2-a3fc-ed7cf91866ff",
+      "name": "Execute Workflow Trigger"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        3216,
+        80
+      ],
+      "id": "c9de3436-a8c9-4f1b-ab1f-fbc0a0a458b6",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "url": "https://paragprojects.atlassian.net/rest/api/3/project/search",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "jiraSoftwareCloudApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "={{ $('Loop Over Items').first().json.project }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        3888,
+        112
+      ],
+      "id": "8b961a3b-4936-492d-b815-dc3672abd995",
+      "name": "Get Project Id",
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "LuOa3npTAyxUG3F7",
+          "name": "Jira SW Cloud account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://paragprojects.atlassian.net/rest/api/2/project/{{ $('Get Project Id').item.json.values[0].id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "jiraSoftwareCloudApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        4112,
+        112
+      ],
+      "id": "5c6ffe1d-c425-4efc-95dc-cca2d7c71ef6",
+      "name": "Get WorkTypes for Project",
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "LuOa3npTAyxUG3F7",
+          "name": "Jira SW Cloud account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const issueTypes = $input.first().json.issueTypes ?? [];\nconst task = issueTypes.find(t => t.name.toLowerCase() === 'task');\n\nreturn [{\n  json: {\n    taskId: task?.id ?? null\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4336,
+        112
+      ],
+      "id": "bf7d6ab3-24ad-43e2-b34b-0a91bbb693c3",
+      "name": "Get Id of Task issueType"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "607733ab-6fc9-4176-9775-d9b08b4dcb3b",
+              "leftValue": "={{ $input.all().length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1872,
+        -96
+      ],
+      "id": "7024e2b0-e4f4-4581-aa5b-1502edcf774b",
+      "name": "If"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Download file": {
+      "main": [
+        [
+          {
+            "node": "Extract Text from Binary File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search files and folders": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Text from Binary File": {
+      "main": [
+        [
+          {
+            "node": "Meeting Analysis OpenAI API Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Meeting Analysis OpenAI API Call": {
+      "main": [
+        [
+          {
+            "node": "Parse OpenAI Response and Prepare Action Items for Jira",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse OpenAI Response and Prepare Action Items for Jira": {
+      "main": [
+        [
+          {
+            "node": "Check for Action Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check for Action Items": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return to Main Workflow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Return to Main Workflow": {
+      "main": [
+        []
+      ]
+    },
+    "Get many issues": {
+      "main": [
+        [
+          {
+            "node": "Check for Duplicates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check for Duplicates": {
+      "main": [
+        [
+          {
+            "node": "Get Project Id",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Search files and folders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [
+          {
+            "node": "Return to Main Workflow",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get many issues",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Jira issue(s)": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Project Id": {
+      "main": [
+        [
+          {
+            "node": "Get WorkTypes for Project",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get WorkTypes for Project": {
+      "main": [
+        [
+          {
+            "node": "Get Id of Task issueType",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Id of Task issueType": {
+      "main": [
+        [
+          {
+            "node": "Create Jira issue(s)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Download file",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return to Main Workflow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "KbsJHQVOmJv0DC48",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "d2faea35-71ad-4939-a874-f0112fc1be24",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "6615b656b8371fddd13c58341e0cea8d6dcdf664a545af635d49e593619368af"
+  },
+  "id": "JFueiBmg3k4Pmazb",
+  "tags": []
+}

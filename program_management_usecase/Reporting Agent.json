@@ -1,0 +1,229 @@
+{
+  "name": "Reporting Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        1392,
+        -80
+      ],
+      "id": "b299e29b-7622-4516-9b75-d46008fb4fed",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "operation": "createFromText",
+        "content": "=={{ $json.briefMarkdown }}",
+        "name": "={{ \"Exec Brief — \" + new Date().toDateString() }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "1P-4TBFkuiu-baH2hf6nkgaUlUKH3GPXy",
+          "mode": "list",
+          "cachedResultName": "n8n_workflow_test",
+          "cachedResultUrl": "https://drive.google.com/drive/folders/1P-4TBFkuiu-baH2hf6nkgaUlUKH3GPXy"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        2064,
+        -144
+      ],
+      "id": "6fdf697b-f9c2-4728-809a-6b59ec4255e2",
+      "name": "Create file from text",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "3qEUbVK2Ew5NTy6E",
+          "name": "Google Drive account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {
+          "includeUnpaired": true
+        }
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        2512,
+        -80
+      ],
+      "id": "1894fbbd-834b-4d88-ac04-3cf22c7a8b29",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const DEBUG = $env.DEBUG === 'true';\nconst log   = (...args) => { if (DEBUG) console.log(...args); };\nconst warn  = (...args) => { if (DEBUG) console.log('[WARN]', ...args); };\n\nconst item = $input.item.json;\n\n// Drive success: item has an 'id' field\nif (item.id) {\n  return {\n  json: {\n    docUrl: `https://drive.google.com/file/d/${item.id}/view?usp=sharing`,\n    fileId: item.id,\n    driveSuccess: true\n  }\n};\n}\n\n// Drive failed or returned no id — use fallback\nwarn('Drive upload failed or returned no file ID. Using fallback docUrl.');\nreturn {\n  json: {\n    docUrl: 'https://drive.google.com',\n    fileId: null,\n    driveSuccess: false\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2288,
+        -144
+      ],
+      "id": "8bed1880-7bc0-4ac3-852f-ffd4bd45a240",
+      "name": "Drive Result Handler"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n  JSON.stringify({\n    model: \"gpt-4o\",\n    max_tokens: 2048,\n    temperature: 0.3,\n    messages: [\n      {\n        role: \"system\",\n        content: \"You are a program reporting agent. Your job is to produce a concise, exec-ready weekly program brief in Markdown format.\\n\\nStructure the brief with exactly these sections:\\n1. Overall status (RAG badge: RED / AMBER / GREEN)\\n2. Workstream summaries (one paragraph per workstream)\\n3. Top risks (bullet list — severity, description, recommended action)\\n4. Decisions needed (bullet list of items requiring exec input)\\n5. Key actions from meetings (bullet list with owners)\\n\\nTone: direct, factual, no filler. Target length: 350-450 words.\\nReturn ONLY the Markdown brief. No preamble, no explanation outside the brief.\"\n      },\n      {\n        role: \"user\",\n        content: \"Produce this week's exec brief using the following data.\\n\\nSTATUS RECORDS:\\n\" +\n          (Array.isArray($json.statusRecords) && $json.statusRecords.length > 0\n    ? JSON.stringify($json.statusRecords, null, 2)\n    : \"No status data available this week. Do not invent status. Mark all workstreams as AMBER with no data.\") +\n          \"\\\\n\\\\nRISK SUMMARY:\\\\n\" +\n  (Array.isArray($json.riskSummary) && $json.riskSummary.length > 0\n    ? JSON.stringify($json.riskSummary, null, 2)\n    : \"No risks identified this week. Do not invent or infer risks. Leave the Top Risks section empty.\") +\n          \"\\\\n\\\\nMEETING DIGEST:\\\\n\" +\n  ($json.commsSummary && Object.keys($json.commsSummary).length > 0\n    ? JSON.stringify($json.commsSummary, null, 2)\n    : \"No meeting notes available this week. Do not invent action items or decisions.\") +\n          \"\\n\\nToday's date: \" + new Date().toDateString()\n      }\n    ]\n  })\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1616,
+        -80
+      ],
+      "id": "ec61672f-e886-44cd-9960-ee7de8fd36fc",
+      "name": "Reporting Agent Open AI Call",
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "maxTries": 3,
+      "credentials": {
+        "openAiApi": {
+          "id": "btt3s54CEvsfy9tv",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Node 4 — parse multiple OpenAI reporting responses\n// Language: JavaScript\n// Mode: Run once for all items\n\nconst DEBUG = $env.DEBUG === 'true';\nconst log   = (...args) => { if (DEBUG) console.log(...args); };\nconst warn  = (...args) => { if (DEBUG) console.log('[WARN]', ...args); };\n\nconst allItems = $input.all();\n\nif (allItems.length === 0) {\n  throw new Error('No input items received');\n}\n\nlog('Total OpenAI responses to process:', allItems.length);\n\nconst results = allItems.map((item, index) => {\n  const response = item.json;\n\n  // Guard API errors per item\n  if (response.error) {\n    throw new Error(\n      `Item ${index}: OpenAI API error: ` + response.error.message\n    );\n  }\n\n  if (!response.choices || response.choices.length === 0) {\n    throw new Error(\n      `Item ${index}: No choices returned: ` +\n      JSON.stringify(response).slice(0, 300)\n    );\n  }\n\n  // Extract the brief — Markdown text not JSON\n  const briefMarkdown = response.choices[0].message.content;\n\n  \n// Schema validation\nif (!briefMarkdown || briefMarkdown.trim().length === 0) {\n  throw new Error(`Item ${index}: OpenAI returned empty brief content`);\n}\n\nconst minWordCount = 100;\nconst wordCount = briefMarkdown.split(/\\s+/).length;\nif (wordCount < minWordCount) {\n  throw new Error(\n    `Item ${index}: Brief is suspiciously short (${wordCount} words, expected at least ${minWordCount}). ` +\n    'Possible truncation or hallucination.\\nPreview: ' + briefMarkdown.slice(0, 200)\n  );\n}\n\nconst requiredSections = ['##', 'RAG', 'risk'];\nconst missingSections = requiredSections.filter(s => !briefMarkdown.includes(s));\nif (missingSections.length > 0) {\n  warn(`Item ${index}: Brief may be missing expected sections. Missing markers: ${missingSections.join(', ')}`);\n  // warn only — don't throw, brief structure may vary\n}\n\n  \n\n  log(`Item ${index} brief length:`, briefMarkdown.length);\n  log(`Item ${index} preview:`, briefMarkdown.slice(0, 200));\n\n  // Detect overall RAG from first 300 characters\n  const ragMatch = briefMarkdown\n    .slice(0, 300)\n    .match(/\\b(RED|AMBER|GREEN)\\b/i);\n\n  const overallRag = ragMatch\n    ? ragMatch[1].toLowerCase()\n    : 'amber';\n\n  log(`Item ${index} overall RAG:`, overallRag);\n\n  return {\n    json: {\n      briefMarkdown,\n      overallRag,\n      wordCount:   briefMarkdown.split(/\\s+/).length,\n      generatedAt: new Date().toISOString(),\n      itemIndex:   index\n    }\n  };\n});\n\nlog('Total briefs parsed:', results.length);\n\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1840,
+        -80
+      ],
+      "id": "097f625c-b7b4-4a55-92eb-adc342a876a1",
+      "name": "Parse OpenAI Reporting Response"
+    },
+    {
+      "parameters": {
+        "jsCode": "const DEBUG = $env.DEBUG === 'true';\nconst log   = (...args) => { if (DEBUG) console.log(...args); };\nconst warn  = (...args) => { if (DEBUG) console.log('[WARN]', ...args); };\n\nconst items = $input.all();\n\nif (items.length === 0) {\n  throw new Error('Return to Main Workflow: Merge produced no output items.');\n}\n\n// Merge combines by position:\n// slot 0 → Drive Result Handler → docUrl, fileId, driveSuccess\n// slot 1 → Code in JavaScript1  → briefMarkdown, overallRag, wordCount, generatedAt\n\nconst driveData = items[0]?.json ?? {};\nconst briefData = items[0]?.json ?? {};\n\n// Validate drive data\nif (!driveData.docUrl) {\n  warn('docUrl missing from Drive slot — using fallback.');\n}\n\n// Validate brief data\nif (!briefData.briefMarkdown || briefData.briefMarkdown.trim() === '') {\n  throw new Error('Return to Main Workflow: briefMarkdown is missing or empty. Cannot return to main workflow.');\n}\n\nlog('docUrl:', driveData.docUrl);\nlog('driveSuccess:', driveData.driveSuccess);\nlog('overallRag:', briefData.overallRag);\nlog('wordCount:', briefData.wordCount);\n\nreturn [{\n  json: {\n    // Drive fields\n    docUrl:        driveData.docUrl       ?? 'https://drive.google.com',\n    fileId:        driveData.fileId       ?? null,\n    driveSuccess:  driveData.driveSuccess ?? false,\n\n    // Brief fields\n    briefMarkdown: briefData.briefMarkdown,\n    overallRag:    briefData.overallRag   ?? 'amber',\n    wordCount:     briefData.wordCount    ?? 0,\n    generatedAt:   briefData.generatedAt  ?? new Date().toISOString(),\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2736,
+        -80
+      ],
+      "id": "8ac22bc3-561d-4dc8-ad07-dad5ba220471",
+      "name": "Return Merged Data to Main Workflow"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Reporting Agent Open AI Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create file from text": {
+      "main": [
+        [
+          {
+            "node": "Drive Result Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Drive Result Handler": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Return Merged Data to Main Workflow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reporting Agent Open AI Call": {
+      "main": [
+        [
+          {
+            "node": "Parse OpenAI Reporting Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse OpenAI Reporting Response": {
+      "main": [
+        [
+          {
+            "node": "Create file from text",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "KbsJHQVOmJv0DC48",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "da10603d-b6a3-47bc-bded-b176cf0888be",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "6615b656b8371fddd13c58341e0cea8d6dcdf664a545af635d49e593619368af"
+  },
+  "id": "54ZepALq88IjywX3",
+  "tags": []
+}

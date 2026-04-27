@@ -1,0 +1,307 @@
+{
+  "name": "Slack Approval Handler",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "slack-approval",
+        "options": {
+          "responseCode": {
+            "values": {}
+          }
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -16,
+        432
+      ],
+      "id": "5172cbbb-1b87-4031-bed7-76ad8b927db2",
+      "name": "Webhook",
+      "webhookId": "dd834657-b8c1-40ed-9e62-90bf7bff7230",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const DEBUG = $env.DEBUG === 'true';\nconst log   = (...args) => { if (DEBUG) console.log(...args); };\n\nconst body = $input.first().json.body;\n\nlet payload;\ntry {\n  const decoded = decodeURIComponent(body.payload ?? '{}');\n  payload = JSON.parse(decoded);\n} catch(e) {\n  throw new Error('Could not parse Slack payload: ' + e.message);\n}\n\nconst actionId  = payload.actions?.[0]?.action_id ?? 'unknown';\nconst actionVal = payload.actions?.[0]?.value      ?? '';\nconst userName  = payload.user?.name               ?? 'unknown';\nconst approved  = actionId === 'approve_brief';\n\nlog('Action:', actionId, 'by', userName);\n\nreturn [{\n  json: {\n    actionId,\n    actionVal,\n    userName,\n    approved,\n    docUrl:    actionVal.startsWith('http') ? actionVal : '',\n    clickedAt: new Date().toISOString()\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        432
+      ],
+      "id": "501578c7-28ca-4019-b25e-b8a8188abb49",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "74e29232-b55e-4304-9360-7ed3c4017bc8",
+              "leftValue": "={{ $json.actionId }}",
+              "rightValue": "=approve_brief",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        432,
+        432
+      ],
+      "id": "157fedd1-3949-4617-8f0e-cb06eeed79f7",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $env.VAR_EXEC_EMAIL_RECIPIENT }}",
+        "subject": "Exec Brief",
+        "emailType": "text",
+        "message": "=={{\n\"Weekly Program Brief — \" + new Date().toDateString() + \"\\n\" +\n\"Full brief: \" + ($json.docUrl ?? '')\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        656,
+        240
+      ],
+      "id": "58c10b8c-ca9a-492e-bb86-1a01dc974431",
+      "name": "Send a message",
+      "webhookId": "cf1808ee-cf17-4544-b52a-d5f0a165be1a",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "W6qamhCRCfcqkmCL",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "={{ $env.SLACK_CHANNEL_EXEC }}",
+          "mode": "id"
+        },
+        "text": "Message sent to execute successfully.",
+        "otherOptions": {}
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.4,
+      "position": [
+        656,
+        432
+      ],
+      "id": "cc536d37-d6c4-4636-9f19-6845ac716e50",
+      "name": "Send a message1",
+      "webhookId": "4254ebf7-7f4d-416a-981d-28fe6cd0aa2c",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "uyUNHJDBmN2CRFCn",
+          "name": "Slack account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "={{ $env.SLACK_CHANNEL_EXEC }}",
+          "mode": "id"
+        },
+        "text": "Edit Requested by PM",
+        "otherOptions": {}
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.4,
+      "position": [
+        656,
+        624
+      ],
+      "id": "4ef008ad-37c6-4853-a525-2c93637b11ad",
+      "name": "Send a message2",
+      "webhookId": "ce1c9167-89a2-4fc0-a522-b820aa95ea31",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "uyUNHJDBmN2CRFCn",
+          "name": "Slack account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "Unauthorized",
+        "options": {
+          "responseCode": 401,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/plain"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        208,
+        848
+      ],
+      "id": "d878aa13-3a0f-4265-adf6-d511746c2b59",
+      "name": "Rejection Path - 401"
+    },
+    {
+      "parameters": {
+        "respondWith": "noData",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        208,
+        1040
+      ],
+      "id": "2cb0e1e9-1fb5-4eb8-bdd9-9bc3f439ebcc",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "const DEBUG = $env.DEBUG === 'true';\nconst log   = (...args) => { if (DEBUG) console.log(...args); };\n\n// ── S-01 Fix: Slack Request Signature Verification ──────────────────────\nconst crypto = require('crypto');\n\nconst item = $input.first();\n\n// ── 1. Extract required headers ─────────────────────────────────────────\nconst slackSignature = item.json.headers?.['x-slack-signature'];\nconst slackTimestamp = item.json.headers?.['x-slack-request-timestamp'];\nconst rawBody        = item.json.rawBody;\n\n// ── 2. Guard: reject if any required value is missing ───────────────────\nif (!slackSignature || !slackTimestamp || !rawBody) {\n  throw new Error(\n    'SECURITY REJECT: Missing Slack verification headers. ' +\n    'Signature present: ' + !!slackSignature + ', ' +\n    'Timestamp present: ' + !!slackTimestamp + ', ' +\n    'Raw body present: '  + !!rawBody\n  );\n}\n\n// ── 3. Replay attack check ───────────────────────────────────────────────\nconst nowSeconds       = Math.floor(Date.now() / 1000);\nconst timestampSeconds = parseInt(slackTimestamp, 10);\n\nif (isNaN(timestampSeconds)) {\n  throw new Error(\n    'SECURITY REJECT: x-slack-request-timestamp is not a valid integer. ' +\n    'Received: ' + slackTimestamp\n  );\n}\n\nconst ageSecs = Math.abs(nowSeconds - timestampSeconds);\nif (ageSecs > 300) {\n  throw new Error(\n    'SECURITY REJECT: Request is ' + ageSecs + 's old. ' +\n    'Max allowed is 300s. Possible replay attack.'\n  );\n}\n\n// ── 4. Read signing secret from environment variable ────────────────────\nconst signingSecret = $env.SLACK_SIGNING_SECRET;\n\nif (!signingSecret) {\n  throw new Error(\n    'CONFIG ERROR: SLACK_SIGNING_SECRET environment variable is not set. ' +\n    'Add it in n8n Settings → Environment Variables.'\n  );\n}\n\n// ── 5. Build the signature base string ──────────────────────────────────\nconst baseString = `v0:${slackTimestamp}:${rawBody}`;\n\n// ── 6. Compute HMAC-SHA256 ───────────────────────────────────────────────\nconst mySignature = 'v0=' + crypto\n  .createHmac('sha256', signingSecret)\n  .update(baseString, 'utf8')\n  .digest('hex');\n\n// ── 7. Constant-time comparison to prevent timing attacks ────────────────\nconst sigBuffer = Buffer.from(mySignature,    'utf8');\nconst slackBuf  = Buffer.from(slackSignature, 'utf8');\n\nconst lengthsMatch = sigBuffer.length === slackBuf.length;\n\nconst safeA = Buffer.alloc(Math.max(sigBuffer.length, slackBuf.length));\nconst safeB = Buffer.alloc(Math.max(sigBuffer.length, slackBuf.length));\nsigBuffer.copy(safeA);\nslackBuf.copy(safeB);\n\nconst signaturesMatch = lengthsMatch && crypto.timingSafeEqual(safeA, safeB);\n\nif (!signaturesMatch) {\n  throw new Error(\n    'SECURITY REJECT: Slack signature mismatch. ' +\n    'Expected: ' + mySignature + ' | ' +\n    'Received: ' + slackSignature\n  );\n}\n\n// ── 8. Verification passed — pass item through unchanged ─────────────────\nlog('Slack signature verified OK. Request age: ' + ageSecs + 's');\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -16,
+        944
+      ],
+      "id": "e44c26ec-df10-4a05-b309-8308aeedfb4e",
+      "name": "Code in JavaScript1"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send a message1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send a message2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a message1": {
+      "main": [
+        []
+      ]
+    },
+    "Send a message2": {
+      "main": [
+        []
+      ]
+    },
+    "Rejection Path - 401": {
+      "main": [
+        []
+      ]
+    },
+    "Respond to Webhook": {
+      "main": [
+        []
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Rejection Path - 401",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "KbsJHQVOmJv0DC48",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "30bc7fd8-b7f4-4c17-b39f-4fd2fcaa0232",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "6615b656b8371fddd13c58341e0cea8d6dcdf664a545af635d49e593619368af"
+  },
+  "id": "jJoRC77qtNTny9hW",
+  "tags": []
+}

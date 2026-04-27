@@ -1,0 +1,558 @@
+{
+  "name": "Program Management Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "JFueiBmg3k4Pmazb",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/JFueiBmg3k4Pmazb",
+          "cachedResultName": "Comms Agent"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1824,
+        -96
+      ],
+      "name": "Call Comms Agent",
+      "id": "f019028d-b6fa-4c51-855a-9a3ad2a8b957",
+      "alwaysOutputData": false,
+      "executeOnce": false,
+      "retryOnFail": false
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "qQYqqVmZX1t34Wdg",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/qQYqqVmZX1t34Wdg",
+          "cachedResultName": "Status Agent"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1376,
+        -288
+      ],
+      "id": "efd30a4c-4345-4409-a0dd-6c321095256e",
+      "name": "Call 'Status Agent'",
+      "alwaysOutputData": false,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "jQhflq0TQn0v30GM",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/jQhflq0TQn0v30GM",
+          "cachedResultName": "Risk Agent"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1824,
+        -288
+      ],
+      "id": "3be5e2d9-9d3a-4226-ad55-3178b9a74ae6",
+      "name": "Call 'Risk Agent'"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "54ZepALq88IjywX3",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/54ZepALq88IjywX3",
+          "cachedResultName": "Reporting Agent"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        2272,
+        -352
+      ],
+      "name": "Call Reporting Agent",
+      "id": "732ca9dc-321c-40bd-afae-daf9e2f9451c"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [
+                1
+              ],
+              "triggerAtHour": 7
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        32,
+        -192
+      ],
+      "id": "c6e96ec9-8f37-4bdf-b66a-47b02e42ad66",
+      "name": "Weekly cron"
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "appR09XcFwtXya371",
+          "mode": "list",
+          "cachedResultName": "prg_mgmt_base",
+          "cachedResultUrl": "https://airtable.com/appR09XcFwtXya371"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblLTPVmQ8JriBfui",
+          "mode": "list",
+          "cachedResultName": "Projects",
+          "cachedResultUrl": "https://airtable.com/appR09XcFwtXya371/tblLTPVmQ8JriBfui"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        256,
+        -192
+      ],
+      "id": "eaafd193-ecf6-45bf-aa00-8e4746009fb0",
+      "name": "Fetch program context",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "6DWWE8BqsmeYRIzN",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  \"model\": \"gpt-4o\",\n  \"max_tokens\": 1024,\n  \"temperature\": 0.3,\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": $json.systemPrompt\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Produce this week's exec brief.\"\n    }\n  ]\n}) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        928,
+        -288
+      ],
+      "id": "ff4cf76a-edb7-4258-9613-fd1838e7ce7a",
+      "name": "Orchestrator Openai API call",
+      "credentials": {
+        "openAiApi": {
+          "id": "btt3s54CEvsfy9tv",
+          "name": "OpenAi account"
+        },
+        "httpMultipleHeadersAuth": {
+          "id": "a4vc8Pnp5Yijn0uY",
+          "name": "Multiple Headers Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const DEBUG = $env.DEBUG === 'true';\nconst log   = (...args) => { if (DEBUG) console.log(...args); };\nconst warn  = (...args) => { if (DEBUG) console.log('[WARN]', ...args); };\n\n// ── Helpers ─────────────────────────────────────────────────────────────\nfunction buildFallback(projects) {\n  warn('Falling back to full Airtable project list.');\n  return projects.map(p => ({\n    json: {\n      workstream: p.fields.Name,\n      jiraKey:    p.fields.JiraKey,\n      priority:   'medium',\n      _fallback:  true\n    }\n  }));\n}\n\n// ── 1. Extract raw LLM output ────────────────────────────────────────────\nconst response = $input.first().json;\nconst projects = $('Build Orchestrator prompt').first().json.projects;\n\nif (!response.choices || response.choices.length === 0) {\n  warn('Orchestrator returned no choices. Using fallback.');\n  return buildFallback(projects);\n}\n\nconst raw   = response.choices[0].message.content ?? '';\nconst clean = raw.replace(/```json|```/gi, '').trim();\n\n// ── 2. Attempt parse ─────────────────────────────────────────────────────\nlet plan;\ntry {\n  plan = JSON.parse(clean);\n} catch (e) {\n  warn('Orchestrator returned invalid JSON: ' + raw.slice(0, 300));\n  return buildFallback(projects);\n}\n\n// ── 3. Validate it's a non-empty array ───────────────────────────────────\nif (!Array.isArray(plan) || plan.length === 0) {\n  warn('Orchestrator returned empty or non-array plan. Using fallback.');\n  return buildFallback(projects);\n}\n\n// ── 4. Validate each item has the minimum required fields ────────────────\nconst validItems   = [];\nconst invalidItems = [];\n\nplan.forEach((p, i) => {\n  const missingFields = ['workstream', 'jiraKey'].filter(\n    f => !p[f] || p[f].toString().trim() === ''\n  );\n  if (missingFields.length > 0) {\n    warn(`Plan item[${i}] missing fields: ${missingFields.join(', ')}. Dropping item.`);\n    invalidItems.push(p);\n  } else {\n    validItems.push(p);\n  }\n});\n\n// ── 5. If too many items are invalid, fall back entirely ─────────────────\nconst invalidRatio = invalidItems.length / plan.length;\nif (validItems.length === 0 || invalidRatio > 0.5) {\n  warn(\n    `Too many invalid plan items (${invalidItems.length}/${plan.length}). Using fallback.`\n  );\n  return buildFallback(projects);\n}\n\n// ── 6. Return valid items, flagging any partial fallback ─────────────────\nlog(`Orchestrator plan accepted: ${validItems.length} valid items, ${invalidItems.length} dropped.`);\nreturn validItems.map(p => ({\n  json: {\n    workstream: p.workstream.trim(),\n    jiraKey:    p.jiraKey.trim(),\n    priority:   p.priority ?? 'medium',\n    _fallback:  false\n  }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1152,
+        -288
+      ],
+      "id": "8f43d60e-32ae-4023-afbf-a62f42bc278e",
+      "name": "Parse orchestrator plan"
+    },
+    {
+      "parameters": {
+        "jsCode": "const DEBUG = $env.DEBUG === 'true';\nconst log   = (...args) => { if (DEBUG) console.log(...args); };\n\nconst statusRecords = $input.all().map(i => ({\n  ...i.json,\n  weekStart: $now.startOf('week').toISO()\n}));\n\nlog('Status records wrapped:', statusRecords.length);\nlog('Workstreams:', statusRecords.map(r => r.workstream).join(', '));\n\nreturn [{\n  json: {\n    statusRecords\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        -288
+      ],
+      "id": "42546db7-b480-4fc7-b3ac-c304bf23f637",
+      "name": "Status Records Wrapper"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Runs once for all items — no Python required\nconst projects = $input.all().map(i => i.json);\n\nconst DEBUG = $env.DEBUG === 'true';\nconst log   = (...args) => { if (DEBUG) console.log(...args); };\nconst warn  = (...args) => { if (DEBUG) console.log('[WARN]', ...args); };\n\nconst validProjects = projects.filter(p => {\n  const hasName    = p.fields?.Name    && p.fields.Name.trim()    !== '';\n  const hasJiraKey = p.fields?.JiraKey && p.fields.JiraKey.trim() !== '';\n  if (!hasName || !hasJiraKey) {\n    warn('Skipping Airtable record missing Name or JiraKey:', JSON.stringify(p.fields));\n  }\n  return hasName && hasJiraKey;\n});\n\nif (validProjects.length === 0) {\n  throw new Error(\n    'All Airtable project records are missing Name or JiraKey fields. ' +\n    'Check that both columns are populated in the Projects table.'\n  );\n}\n\nlog('Valid projects for orchestrator:', validProjects.length);\n\nconst projectList = validProjects\n  .map(p => `- ${p.fields.Name} (key: ${p.fields.JiraKey})`)\n  .join('\\n');\n\nconst systemPrompt = `You are a program orchestrator agent.\nActive projects:\n${projectList}\nToday: ${new Date().toDateString()}\nGoal: Produce the weekly exec brief.\nReturn ONLY a valid JSON array, no markdown fences:\n[{\"workstream\":\"name\",\"jiraKey\":\"KEY\",\"priority\":\"high|medium|low\"}]`;\n\nreturn [{ json: { systemPrompt, validProjects } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        704,
+        -288
+      ],
+      "id": "ad99989e-f37e-4c52-86dc-2efbb40722f3",
+      "name": "Build Orchestrator prompt"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "numberInputs": 3,
+        "options": {
+          "includeUnpaired": true
+        }
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        2048,
+        -368
+      ],
+      "id": "1da01696-0ad2-452c-aa76-58f7088b1c03",
+      "name": "Combine Results of All 3 Agents",
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Code node before Slack — final version\n// Language: JavaScript\n\nconst DEBUG = $env.DEBUG === 'true';\nconst log   = (...args) => { if (DEBUG) console.log(...args); };\nconst warn  = (...args) => { if (DEBUG) console.log('[WARN]', ...args); };\n\nconst input = $input.first().json;\n\n// Get brief content\nconst briefMarkdown = input.briefMarkdown ?? '';\nconst overallRag    = (input.overallRag ?? 'amber').toUpperCase();\nconst generatedAt   = input.generatedAt ?? new Date().toISOString();\n\n// Build docUrl from id field — id is present in input\nconst fileId = input.id\n  ?? input.fileId\n  ?? null;\n\nconst docUrl = input.docUrl && input.docUrl.length > 0\n  ? input.docUrl\n  : fileId\n    ? `https://drive.google.com/file/d/${fileId}/view?usp=sharing`\n    : 'https://drive.google.com';\n\nlog('fileId:', fileId);\nlog('docUrl:', docUrl);\n\n// Strip image markdown — Slack does not render images\nconst cleanBrief = briefMarkdown\n  .replace(/!\\[.*?\\]\\(.*?\\)/g, '')\n  .replace(/\\n{3,}/g, '\\n\\n')\n  .trim()\n  .slice(0, 2900);\n\n// Build Slack blocks\nconst slackBlocks = [\n  {\n    type: \"header\",\n    text: { type: \"plain_text\", text: \"Weekly exec brief ready for review\" }\n  },\n  {\n    type: \"section\",\n    fields: [\n      { type: \"mrkdwn\", text: \"*Overall status*\\n\" + overallRag },\n      { type: \"mrkdwn\", text: \"*Generated*\\n\" + new Date().toDateString() }\n    ]\n  },\n  {\n    type: \"section\",\n    text: { type: \"mrkdwn\", text: cleanBrief }\n  },\n  {\n    type: \"section\",\n    text: {\n      type: \"mrkdwn\",\n      text: \"<\" + docUrl + \"|Open full brief in Google Drive>\"\n    }\n  },\n  { type: \"divider\" },\n  {\n    type: \"actions\",\n    elements: [\n      {\n        type: \"button\",\n        text: { type: \"plain_text\", text: \"Approve and send\" },\n        style: \"primary\",\n        action_id: \"approve_brief\",\n        value: docUrl\n      },\n      {\n        type: \"button\",\n        text: { type: \"plain_text\", text: \"Request edit\" },\n        style: \"danger\",\n        action_id: \"request_edit\",\n        value: \"request_edit\"\n      }\n    ]\n  }\n];\n\nreturn [{\n  json: {\n    briefMarkdown,\n    overallRag: input.overallRag ?? 'amber',\n    docUrl,\n    fileId,\n    generatedAt,\n    slackBlocks\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2496,
+        -352
+      ],
+      "id": "4c7e9de2-1fb7-4df6-8be8-2d9382a23734",
+      "name": "Parse for Slack Call"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackOAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n  {\n    channel: $env['SLACK_CHANNEL_EXEC'],\n    text: \"Weekly exec brief ready for review — \" + ($json.overallRag ?? 'amber').toUpperCase(),\n    blocks: $json.slackBlocks\n  }\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2720,
+        -352
+      ],
+      "id": "eaf3a11a-c378-42a3-96cd-4dfb455065f9",
+      "name": "Call Slack",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "lR6yr4nFTK0kCtgI",
+          "name": "Header Auth account"
+        },
+        "slackOAuth2Api": {
+          "id": "uyUNHJDBmN2CRFCn",
+          "name": "Slack account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "59b3712e-a2cd-46d2-bd8d-e243fd36b41e",
+              "leftValue": "={{ $input.all().length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        480,
+        -192
+      ],
+      "id": "05fd03b0-4ce2-4278-88a1-b6d680d2f14a",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "jsCode": "const DEBUG = $env.DEBUG === 'true';\nconst log   = (...args) => { if (DEBUG) console.log(...args); };\n\nthrow new Error(\n  'No projects found in Airtable. Aborting weekly run.\\n' +\n  'Check:\\n' +\n  '  1. Base ID is correct: ' + ($env.AIRTABLE_BASE_ID ?? 'not set') + '\\n' +\n  '  2. Projects table exists and has records\\n' +\n  '  3. Airtable Personal Access Token has read access to this base'\n);"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        704,
+        -96
+      ],
+      "id": "cacd3407-4936-491d-a37b-2ea549797647",
+      "name": "No Projects Found"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Call Comms Agent": {
+      "main": [
+        [
+          {
+            "node": "Combine Results of All 3 Agents",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Call 'Status Agent'": {
+      "main": [
+        [
+          {
+            "node": "Status Records Wrapper",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call 'Risk Agent'": {
+      "main": [
+        [
+          {
+            "node": "Combine Results of All 3 Agents",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Weekly cron": {
+      "main": [
+        [
+          {
+            "node": "Fetch program context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch program context": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Orchestrator Openai API call": {
+      "main": [
+        [
+          {
+            "node": "Parse orchestrator plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse orchestrator plan": {
+      "main": [
+        [
+          {
+            "node": "Call 'Status Agent'",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Status Records Wrapper": {
+      "main": [
+        [
+          {
+            "node": "Combine Results of All 3 Agents",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Call 'Risk Agent'",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Call Comms Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Orchestrator prompt": {
+      "main": [
+        [
+          {
+            "node": "Orchestrator Openai API call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine Results of All 3 Agents": {
+      "main": [
+        [
+          {
+            "node": "Call Reporting Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Reporting Agent": {
+      "main": [
+        [
+          {
+            "node": "Parse for Slack Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse for Slack Call": {
+      "main": [
+        [
+          {
+            "node": "Call Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Slack": {
+      "main": [
+        []
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Build Orchestrator prompt",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Projects Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "KbsJHQVOmJv0DC48",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "b3cacdb0-45cc-4cf6-ae8a-5ad148057dcb",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "6615b656b8371fddd13c58341e0cea8d6dcdf664a545af635d49e593619368af"
+  },
+  "id": "SbBBCT5B2KrX7VWS",
+  "tags": []
+}
